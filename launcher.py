@@ -6,11 +6,12 @@ import shutil
 import time
 import json
 import threading
+import urllib.request
 
 
 OLLAMA_MODEL = "qwen3.5:9b"
 OLLAMA_BIN = "/usr/local/bin/ollama"
-EXTRA_PATH = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", os.path.expanduser("~/.local/bin")]
+OLLAMA_API = "http://localhost:11434"
 
 
 def log(msg):
@@ -18,36 +19,30 @@ def log(msg):
 
 
 def setup_path():
-    current = os.environ.get("PATH", "")
-    for p in EXTRA_PATH:
-        if p not in current:
-            current = p + ":" + current
-    os.environ["PATH"] = current
+    for p in ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", os.path.expanduser("~/.local/bin")]:
+        if p not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = p + ":" + os.environ.get("PATH", "")
 
 
-def check_ollama_binary():
-    return shutil.which("ollama") is not None or os.path.isfile(OLLAMA_BIN)
+def get_ollama_bin():
+    return shutil.which("ollama") or OLLAMA_BIN
 
 
 def check_ollama_running():
     try:
-        r = subprocess.run(
-            ["curl", "-s", "--max-time", "3", "http://localhost:11434/api/tags"],
-            capture_output=True, text=True, timeout=5
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            data = json.loads(r.stdout)
+        req = urllib.request.Request(f"{OLLAMA_API}/api/tags")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
             return True, data.get("models", [])
     except Exception:
-        pass
-    return False, []
+        return False, []
 
 
 def install_ollama():
     log("安装 Ollama...")
     try:
         r = subprocess.run(
-            ["/bin/bash", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+            ["/bin/bash", "-c", "/usr/bin/curl -fsSL https://ollama.com/install.sh | sh"],
             capture_output=True, text=True, timeout=300
         )
         return r.returncode == 0
@@ -57,20 +52,23 @@ def install_ollama():
 
 def start_ollama():
     log("启动 Ollama...")
-    ollama = shutil.which("ollama") or OLLAMA_BIN
+    ollama = get_ollama_bin()
+    if not os.path.isfile(ollama):
+        return False
     subprocess.Popen([ollama, "serve"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(15):
         time.sleep(1)
         running, _ = check_ollama_running()
         if running:
+            log("Ollama 已启动")
             return True
     return False
 
 
 def pull_model():
     log(f"下载模型 {OLLAMA_MODEL}...")
-    ollama = shutil.which("ollama") or OLLAMA_BIN
+    ollama = get_ollama_bin()
     proc = subprocess.Popen(
         [ollama, "pull", OLLAMA_MODEL],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
@@ -91,19 +89,20 @@ def check_model(models):
 
 
 def ensure_environment():
-    if not check_ollama_binary():
+    ollama = get_ollama_bin()
+    if not os.path.isfile(ollama):
         if not install_ollama():
-            return "Ollama 安装失败，请手动安装:\nbrew install ollama 或从 ollama.com 下载"
+            return "Ollama 安装失败\n请手动安装: brew install ollama\n或从 https://ollama.com 下载"
 
     running, models = check_ollama_running()
     if not running:
         if not start_ollama():
-            return "Ollama 启动失败，请手动运行:\nollama serve"
+            return "Ollama 启动失败\n请在终端运行: ollama serve"
         running, models = check_ollama_running()
 
     if not check_model(models):
         if not pull_model():
-            return f"模型下载失败，请手动运行:\nollama pull {OLLAMA_MODEL}"
+            return f"模型下载失败\n请在终端运行: ollama pull {OLLAMA_MODEL}"
 
     return None
 
@@ -155,7 +154,6 @@ def main():
             cfg["_translator"] = Translator(model=cfg["ollama_model"], base_url=base_url)
 
             root.after(0, lambda: label.config(text="加载语音识别模型..."))
-            root.update_idletasks()
 
             cfg["_asr"] = ASREngine(
                 model_name=cfg["asr_model"],
