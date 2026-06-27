@@ -30,6 +30,7 @@ def start_subtitle_app(cfg, audio, asr, translator, device_id):
         asr.reset_cache()
 
     def on_asr_final(text):
+        print(f"[ASR最终] {text[:50]}", flush=True)
         translator.submit(text)
 
     def on_settings():
@@ -76,9 +77,7 @@ def main():
     print("[..] 加载 ASR 模型...")
     asr = ASREngine(
         model_name=cfg["asr_model"],
-        chunk_size=cfg["chunk_size"],
-        encoder_chunk_look_back=cfg["encoder_chunk_look_back"],
-        decoder_chunk_look_back=cfg["decoder_chunk_look_back"],
+        vad_model=cfg.get("vad_model", "fsmn-vad"),
         punc_model=cfg.get("punc_model", "ct-punc"),
     )
     asr.silence_timeout = cfg.get("silence_timeout", 1.5)

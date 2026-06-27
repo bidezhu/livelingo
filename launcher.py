@@ -167,9 +167,7 @@ def main():
 
             cfg["_asr"] = ASREngine(
                 model_name=cfg["asr_model"],
-                chunk_size=cfg["chunk_size"],
-                encoder_chunk_look_back=cfg["encoder_chunk_look_back"],
-                decoder_chunk_look_back=cfg["decoder_chunk_look_back"],
+                vad_model=cfg.get("vad_model", "fsmn-vad"),
                 punc_model=cfg.get("punc_model", "ct-punc"),
             )
             cfg["_asr"].silence_timeout = cfg.get("silence_timeout", 1.5)

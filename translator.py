@@ -39,9 +39,18 @@ class Translator:
             target_lang = "en" if src_lang == "zh" else "zh"
 
         lang_name = "英文" if target_lang == "en" else "中文"
-        prompt = (
-            f"将以下文本翻译成{lang_name}，只输出翻译结果，不要解释：\n{text}"
-        )
+        if target_lang == "zh":
+            prompt = (
+                f"你是一位专业的会议同声传译。将以下英文翻译成地道的中文。\n"
+                f"要求：准确、自然、简洁、符合中文表达习惯。只输出翻译结果。\n"
+                f"英文：{text}"
+            )
+        else:
+            prompt = (
+                f"You are a professional conference interpreter. Translate the following Chinese into natural English.\n"
+                f"Requirements: accurate, natural, concise. Output only the translation.\n"
+                f"Chinese: {text}"
+            )
 
         try:
             resp = requests.post(
@@ -89,5 +98,7 @@ class Translator:
                 continue
             if text is None:
                 continue
+            print(f"[翻译] 收到: {text[:40]}...", flush=True)
             result = self.translate(text)
+            print(f"[翻译] 结果: {result[:40]}...", flush=True)
             self.result_queue.put({"original": text, "translated": result})
