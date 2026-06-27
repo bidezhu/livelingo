@@ -60,7 +60,7 @@ def main():
             api_key = cfg.get("api_key", "")
 
             if not api_key:
-                app_state["error"] = "未配置 API Key\n请在设置中填入"
+                app_state["error"] = "no_api_key"
                 return
 
             root.after(0, lambda: label.config(text="连接 ASR 服务..."))
@@ -89,7 +89,28 @@ def main():
     threading.Thread(target=bg_setup, daemon=True).start()
 
     def poll_ready():
-        if app_state["error"]:
+        if app_state["error"] == "no_api_key":
+            from config import load_config, save_config
+            from settings_panel import SettingsPanel
+
+            cfg = load_config()
+
+            def on_key_saved(new_cfg):
+                save_config(new_cfg)
+                app_state["error"] = None
+                label.config(text="重新启动中...")
+                root.update()
+                threading.Thread(target=bg_setup, daemon=True).start()
+                root.after(1000, poll_ready)
+
+            label.config(text="首次使用，请配置 API Key")
+            root.update()
+            panel = SettingsPanel(cfg, on_apply=on_key_saved)
+            panel.show(parent=root)
+            if app_state["error"] == "no_api_key":
+                root.destroy()
+            return
+        elif app_state["error"]:
             label.config(text=f"启动失败:\n{app_state['error']}")
             return
 

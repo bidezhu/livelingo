@@ -108,13 +108,14 @@ if [ ! -f "$USER_DIR/config.json" ]; then
     cp "$APP_RESOURCES/default_config.json" "$USER_DIR/config.json"
 fi
 
-# Find Python
+# Find Python (search common paths)
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/opt/python@3.11/bin:/usr/bin:$PATH"
 PYTHON=""
 for p in python3.11 python3.12 python3.13 python3; do
     if command -v $p &>/dev/null; then
         VER=$($p -c "import sys; print(sys.version_info.minor)" 2>/dev/null)
         if [ "$VER" -ge 11 ] 2>/dev/null; then
-            PYTHON=$p
+            PYTHON=$(command -v $p)
             break
         fi
     fi
