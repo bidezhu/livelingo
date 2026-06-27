@@ -23,6 +23,16 @@ def setup_path():
         if p not in os.environ.get("PATH", ""):
             os.environ["PATH"] = p + ":" + os.environ.get("PATH", "")
 
+    if "TCL_LIBRARY" not in os.environ:
+        import glob
+        python_base = os.path.dirname(os.path.dirname(sys.executable))
+        tcl_candidates = glob.glob(os.path.join(python_base, "lib", "tcl*"))
+        if tcl_candidates:
+            os.environ["TCL_LIBRARY"] = tcl_candidates[0]
+        tk_candidates = glob.glob(os.path.join(python_base, "lib", "tk*"))
+        if tk_candidates:
+            os.environ["TK_LIBRARY"] = tk_candidates[0]
+
 
 def get_ollama_bin():
     return shutil.which("ollama") or OLLAMA_BIN
