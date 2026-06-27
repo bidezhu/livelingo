@@ -15,7 +15,6 @@ class SubtitleUI:
         screen_h = self.root.winfo_screenheight()
         win_h = cfg.get("window_height", 220)
         self.root.geometry(f"{screen_w}x{win_h}+0+{screen_h - win_h}")
-        self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=cfg["bg_color"])
 
@@ -51,6 +50,14 @@ class SubtitleUI:
         tk.Button(status_bar, text="麦克风", command=self._on_mic_click,
                   **btn_style).pack(side="right", pady=3)
 
+        self._fullscreen = False
+        self._prev_geometry = None
+        tk.Button(status_bar, text="全屏", command=self._toggle_fullscreen,
+                  **btn_style).pack(side="right", pady=3)
+
+        tk.Button(status_bar, text="适配屏幕", command=self._fit_screen,
+                  **btn_style).pack(side="right", pady=3)
+
         self.main_frame = tk.Frame(self.root, bg=cfg["bg_color"])
         self.main_frame.pack(fill="both", expand=True, padx=20, pady=(10, 0))
 
@@ -80,6 +87,22 @@ class SubtitleUI:
         self.root.bind("<Command-Down>", lambda e: self._move_window(30))
         self.root.bind("<Command-h>", lambda e: self._toggle_visibility())
         self.root.bind("<Command-,>", lambda e: self._on_settings_click())
+        self._drag_data = {"x": 0, "y": 0}
+        self.root.bind("<Button-1>", self._on_drag_start)
+        self.root.bind("<B1-Motion>", self._on_drag_motion)
+        self.text_area.bind("<Button-1>", self._on_drag_start)
+        self.text_area.bind("<B1-Motion>", self._on_drag_motion)
+
+    def _on_drag_start(self, event):
+        self._drag_data["x"] = event.x
+        self._drag_data["y"] = event.y
+
+    def _on_drag_motion(self, event):
+        dx = event.x - self._drag_data["x"]
+        dy = event.y - self._drag_data["y"]
+        x = self.root.winfo_x() + dx
+        y = self.root.winfo_y() + dy
+        self.root.geometry(f"+{x}+{y}")
 
     def _move_window(self, delta):
         geo = self.root.geometry()
@@ -101,6 +124,24 @@ class SubtitleUI:
     def _on_settings_click(self):
         if self.on_settings:
             self.on_settings()
+
+    def _toggle_fullscreen(self):
+        if self._fullscreen:
+            if self._prev_geometry:
+                self.root.geometry(self._prev_geometry)
+            self._fullscreen = False
+        else:
+            self._prev_geometry = self.root.geometry()
+            self.root.geometry(f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0")
+            self._fullscreen = True
+
+    def _fit_screen(self):
+        self._prev_geometry = self.root.geometry()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        win_h = self.cfg.get("window_height", 220)
+        self.root.geometry(f"{screen_w}x{win_h}+0+{screen_h - win_h}")
+        self._fullscreen = False
 
     def apply_settings(self, cfg):
         self.cfg = cfg
@@ -170,6 +211,7 @@ class SubtitleUI:
         try:
             while True:
                 result = translator_queue.get_nowait()
+                print(f"[UI] 翻译: {result['translated'][:30]}", flush=True)
                 self.update_subtitles(
                     new_pair=(result["original"], result["translated"])
                 )
