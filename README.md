@@ -45,13 +45,12 @@ ollama pull qwen3.5:9b  # 下载翻译模型 (~6.6GB)
 ### 3. 运行 LiveLingo
 
 ```bash
-# 方式一：使用打包好的 .app（推荐）
-# 双击 dist/LiveSubtitle.app
+# 方式一：双击 LiveLingo.app（项目根目录下）
+# 首次会自动下载 ASR 模型
 
-# 方式二：源码运行
+# 方式二：终端运行
 cd livelingo
-./setup.sh   # 首次：安装 Python 依赖
-./run.sh     # 启动
+./run.sh
 ```
 
 ### 4. 首次运行
