@@ -38,7 +38,7 @@ class ASREngine:
         self._running = False
         self._audio_queue = None
         self.silence_timeout = 1.5
-        self.voice_threshold = 0.02
+        self.voice_threshold = 0.005
         self._recognition = None
         self._callback = None
 
@@ -57,7 +57,9 @@ class ASREngine:
                 sentence = result.get_sentence()
                 if sentence and 'text' in sentence:
                     text = sentence['text']
-                    if RecognitionResult.is_sentence_end(sentence):
+                    end = RecognitionResult.is_sentence_end(sentence)
+                    print(f"[ASR回调] text={repr(text)} end={end}", flush=True)
+                    if end:
                         if text and not is_filler(text):
                             engine.result_queue.put({"type": "final", "text": text})
                     else:
@@ -65,9 +67,10 @@ class ASREngine:
                             engine.result_queue.put({"type": "partial", "text": text})
 
             def on_complete(self):
-                pass
+                print("[ASR回调] complete", flush=True)
 
             def on_error(self, result):
+                print(f"[ASR回调] error: {result.message}", flush=True)
                 engine.result_queue.put({"type": "error", "text": str(result.message)})
 
         self._callback = ASRCallback()
@@ -112,7 +115,7 @@ class ASREngine:
 
             buffer = np.array([], dtype=np.float32)
             last_voice_time = time.time()
-            min_buffer_samples = self.sample_rate * 0.5
+            min_buffer_samples = self.sample_rate * 0.3
             chunks_sent = 0
 
             while self._running:
@@ -141,6 +144,12 @@ class ASREngine:
                     continue
 
                 audio_np = audio if isinstance(audio, np.ndarray) else np.array(audio, dtype=np.float32)
+
+                max_amp = np.max(np.abs(audio_np))
+                if 0 < max_amp < 0.5:
+                    gain = min(0.8 / max_amp, 20.0)
+                    audio_np = audio_np * gain
+
                 buffer = np.concatenate([buffer, audio_np])
 
                 rms = np.sqrt(np.mean(audio_np ** 2))
@@ -148,6 +157,7 @@ class ASREngine:
                     last_voice_time = time.time()
 
                 chunk_samples = int(self.sample_rate * 0.1)
+                sent_this_round = 0
                 while len(buffer) >= chunk_samples:
                     chunk = buffer[:chunk_samples]
                     buffer = buffer[chunk_samples:]
@@ -155,12 +165,13 @@ class ASREngine:
                     try:
                         self._recognition.send_audio_frame(pcm)
                         chunks_sent += 1
+                        sent_this_round += 1
                     except Exception as e:
                         print(f"[ASR] 发送失败: {e}", flush=True)
                         break
 
                 if chunks_sent > 0 and chunks_sent % 50 == 0:
-                    print(f"[ASR] 已发送 {chunks_sent} 块音频", flush=True)
+                    print(f"[ASR] 已发送 {chunks_sent} 块, rms={rms:.4f}", flush=True)
 
             try:
                 self._recognition.getDuplexApi().close(1000, "bye")
