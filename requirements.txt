@@ -1,0 +1,8 @@
+torch
+torchaudio
+funasr
+sounddevice
+numpy
+scipy
+requests
+pyinstaller
