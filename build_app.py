@@ -48,8 +48,8 @@ def build():
     # Write main executable shell script
     exec_script = f'''#!/bin/bash
 # LiveLingo - Real-time Bilingual Subtitle Tool
-DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROJECT_DIR="$(dirname "$DIR")"
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$APP_DIR/../../.." && pwd)"
 
 # Find venv python
 VENV_PYTHON="$PROJECT_DIR/.venv/bin/python"
