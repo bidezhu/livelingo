@@ -30,45 +30,35 @@ def check_ollama(cfg):
     return t
 
 
-def select_device(cfg):
+def get_device_id(cfg):
     devices = AudioCapture.list_input_devices()
     if not devices:
-        print("错误: 未找到音频输入设备")
-        sys.exit(1)
+        print("[!] 未找到音频输入设备，使用系统默认")
+        return None
 
-    if cfg.get("device_id") is not None:
-        found = any(d["id"] == cfg["device_id"] for d in devices)
-        if found:
-            print(f"[OK] 使用已保存设备: {cfg.get('device_name', cfg['device_id'])}")
-            return cfg["device_id"]
+    saved_id = cfg.get("device_id")
+    if saved_id is not None and any(d["id"] == saved_id for d in devices):
+        print(f"[OK] 使用已保存设备: {cfg.get('device_name', saved_id)}")
+        return saved_id
 
-    selector = DeviceSelector(devices, current_id=cfg.get("device_id"))
-    device_id, device_name = selector.show()
+    for d in devices:
+        if "麦克风" in d["name"] or "microphone" in d["name"].lower():
+            print(f"[OK] 自动选择: {d['name']}")
+            return d["id"]
 
-    if device_id is None:
-        if len(devices) == 1:
-            device_id = devices[0]["id"]
-            device_name = devices[0]["name"]
-        else:
-            print("未选择设备，使用系统默认")
-            return None
-
-    cfg["device_id"] = device_id
-    cfg["device_name"] = device_name
-    save_config(cfg)
-    print(f"[OK] 选择设备: {device_name}")
-    return device_id
+    print(f"[OK] 使用: {devices[0]['name']}")
+    return devices[0]["id"]
 
 
 def main():
     cfg = load_config()
 
     print("=" * 50)
-    print("  Live Subtitle - 本地离线中英双语实时字幕")
+    print("  LiveLingo - 本地离线中英双语实时字幕")
     print("=" * 50)
 
     translator = check_ollama(cfg)
-    device_id = select_device(cfg)
+    device_id = get_device_id(cfg)
 
     print("[..] 加载 ASR 模型 (首次可能需要下载)...")
     asr = ASREngine(
@@ -82,10 +72,7 @@ def main():
     asr.load_model()
     print("[OK] ASR 模型加载完成")
 
-    audio = AudioCapture(
-        sample_rate=cfg["sample_rate"],
-        device_id=device_id,
-    )
+    audio = AudioCapture(sample_rate=cfg["sample_rate"], device_id=device_id)
 
     def restart_mic():
         nonlocal device_id
@@ -123,8 +110,8 @@ def main():
     audio.start()
     asr.start(audio.audio_queue)
     translator.start()
-    print("[OK] 系统就绪，开始说话吧！")
-    print("     Cmd+Q 退出 | Cmd+↑/↓ 调整位置 | Cmd+H 隐藏 | Cmd+, 设置")
+    print("[OK] 系统就绪！")
+    print("     Cmd+Q 退出 | Cmd+↑/↓ 移动 | Cmd+H 隐藏 | Cmd+, 设置")
 
     ui.update_status("就绪 - 请开始说话")
 
