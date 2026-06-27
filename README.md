@@ -25,39 +25,27 @@
 
 ## 快速开始
 
-### 1. 安装 Ollama
+### 1. 安装
 
 ```bash
-# 方式一：Homebrew
-brew install ollama
-
-# 方式二：从官网下载
-# https://ollama.com
-```
-
-### 2. 下载翻译模型
-
-```bash
-ollama serve &        # 启动 Ollama 服务
-ollama pull qwen3.5:9b  # 下载翻译模型 (~6.6GB)
-```
-
-### 3. 运行 LiveLingo
-
-```bash
-# 方式一：双击 LiveLingo.app（项目根目录下）
-# 首次会自动下载 ASR 模型
-
-# 方式二：终端运行
+git clone https://github.com/bidezhu/livelingo.git
 cd livelingo
-./run.sh
+chmod +x install.sh
+./install.sh
 ```
 
-### 4. 首次运行
+安装向导会自动：
+- 检查 Python 环境
+- 创建虚拟环境并安装依赖
+- 引导输入百炼 API Key
+- 生成 LiveLingo.app
 
-- 系统会弹出麦克风选择窗口，选择你的输入设备
-- 首次运行会自动下载 FunASR 语音识别模型 (~220MB)
-- 字幕栏出现在屏幕底部，开始说话即可
+### 2. 运行
+
+```bash
+# 双击 LiveLingo.app
+# 或终端运行 ./run.sh
+```
 
 ## 快捷键
 
