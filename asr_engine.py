@@ -4,8 +4,17 @@ import numpy as np
 import io
 import wave
 import base64
-import json
 import re
+
+
+FILLER_WORDS_ZH = set("嗯嗯啊啊额呃哦嗯嗯哼哈呢吧呀啦嘛么的了".split())
+FILLER_PATTERNS = [
+    r'^(嗯+|啊+|额+|呃+|哦+|嗯哼+|哈+)+[，,。.！!？?]*$',
+    r'^(uh+|um+|er+|ah+|oh+|hmm+|mm+)+[,.!?]*$',
+    r'^(那个|就是|然后|怎么说呢|就是说|对吧|是吧|你知道)+[，,。.]*$',
+    r'^(you know|like|I mean|well|so|right|basically)+[,!.]*$',
+    r'^[，,。.！!？?\s]+$',
+]
 
 
 def numpy_to_wav_base64(audio_np, sample_rate=16000):
@@ -17,6 +26,18 @@ def numpy_to_wav_base64(audio_np, sample_rate=16000):
         pcm = (audio_np * 32767).astype(np.int16)
         wf.writeframes(pcm.tobytes())
     return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def is_filler(text):
+    text = text.strip()
+    if not text:
+        return True
+    if len(text) <= 2 and all(c in FILLER_WORDS_ZH for c in text):
+        return True
+    for pattern in FILLER_PATTERNS:
+        if re.match(pattern, text, re.IGNORECASE):
+            return True
+    return False
 
 
 class ASREngine:
@@ -35,6 +56,7 @@ class ASREngine:
         self._client = None
         self._punc_model_name = punc_model
         self._punc_model = None
+        self.voice_threshold = 0.02
 
     def load_model(self):
         from openai import OpenAI
@@ -121,7 +143,7 @@ class ASREngine:
             buffer = np.concatenate([buffer, audio_np])
 
             rms = np.sqrt(np.mean(audio_np ** 2))
-            if rms > 0.01:
+            if rms > self.voice_threshold:
                 last_voice_time = time.time()
 
             if len(buffer) >= max_buffer_samples or (len(buffer) >= min_buffer_samples and time.time() - last_voice_time > self.silence_timeout):
@@ -129,11 +151,11 @@ class ASREngine:
                 buffer = np.array([], dtype=np.float32)
 
     def _flush_buffer(self, buffer):
-        if len(buffer) < self.sample_rate * 0.5:
+        if len(buffer) < self.sample_rate * 0.8:
             return
         try:
             text = self.recognize(buffer)
-            if text:
+            if text and not is_filler(text):
                 self.result_queue.put({"type": "final", "text": text})
         except Exception as e:
             self.result_queue.put({"type": "error", "text": str(e)})
