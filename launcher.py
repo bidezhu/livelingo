@@ -9,14 +9,24 @@ import threading
 
 
 OLLAMA_MODEL = "qwen3.5:9b"
+OLLAMA_BIN = "/usr/local/bin/ollama"
+EXTRA_PATH = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", os.path.expanduser("~/.local/bin")]
 
 
 def log(msg):
     print(f"[LiveLingo] {msg}", flush=True)
 
 
+def setup_path():
+    current = os.environ.get("PATH", "")
+    for p in EXTRA_PATH:
+        if p not in current:
+            current = p + ":" + current
+    os.environ["PATH"] = current
+
+
 def check_ollama_binary():
-    return shutil.which("ollama") is not None
+    return shutil.which("ollama") is not None or os.path.isfile(OLLAMA_BIN)
 
 
 def check_ollama_running():
@@ -47,7 +57,8 @@ def install_ollama():
 
 def start_ollama():
     log("启动 Ollama...")
-    subprocess.Popen(["ollama", "serve"],
+    ollama = shutil.which("ollama") or OLLAMA_BIN
+    subprocess.Popen([ollama, "serve"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(15):
         time.sleep(1)
@@ -59,8 +70,9 @@ def start_ollama():
 
 def pull_model():
     log(f"下载模型 {OLLAMA_MODEL}...")
+    ollama = shutil.which("ollama") or OLLAMA_BIN
     proc = subprocess.Popen(
-        ["ollama", "pull", OLLAMA_MODEL],
+        [ollama, "pull", OLLAMA_MODEL],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
     for line in proc.stdout:
@@ -97,6 +109,8 @@ def ensure_environment():
 
 
 def main():
+    setup_path()
+
     if getattr(sys, 'frozen', False):
         base_dir = sys._MEIPASS
     else:
