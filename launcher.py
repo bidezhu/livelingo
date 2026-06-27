@@ -3,82 +3,147 @@ import sys
 import os
 import subprocess
 import shutil
+import time
+import json
+import urllib.request
 import tkinter as tk
 from tkinter import messagebox
 
 
-def check_ollama():
-    ollama = shutil.which("ollama")
-    if not ollama:
-        return False, "未安装 Ollama"
+OLLAMA_MODEL = "qwen3.5:9b"
+
+
+def show_progress(msg):
+    root = tk.Tk()
+    root.title("LiveLingo")
+    root.geometry("400x120")
+    root.resizable(False, False)
+    root.attributes("-topmost", True)
+    label = tk.Label(root, text=msg, font=("Helvetica", 13), wraplength=380, pady=20)
+    label.pack(fill="both", expand=True)
+    root.update()
+    return root, label
+
+
+def check_ollama_binary():
+    return shutil.which("ollama") is not None
+
+
+def check_ollama_running():
     try:
         r = subprocess.run(["curl", "-s", "--max-time", "3", "http://localhost:11434/api/tags"],
-                           capture_output=True, text=True)
-        if r.returncode != 0 or not r.stdout.strip():
-            return False, "Ollama 服务未运行"
-        import json
-        data = json.loads(r.stdout)
-        models = [m["name"] for m in data.get("models", [])]
-        if not any("qwen3.5" in m for m in models):
-            return False, f"翻译模型未下载，当前模型: {models}"
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return True, data.get("models", [])
+    except Exception:
+        pass
+    return False, []
+
+
+def install_ollama():
+    root, label = show_progress("正在安装 Ollama，请稍候...\n\n首次安装可能需要几分钟")
+    root.update()
+
+    try:
+        r = subprocess.run(
+            ["/bin/bash", "-c",
+             'curl -fsSL https://ollama.com/install.sh | sh'],
+            capture_output=True, text=True, timeout=300
+        )
+        root.destroy()
+        if r.returncode == 0:
+            return True
+        else:
+            root2, _ = show_progress(f"Ollama 安装失败:\n{r.stderr[:200]}")
+            root2.after(5000, root2.destroy)
+            root2.mainloop()
+            return False
     except Exception as e:
-        return False, f"检查 Ollama 失败: {e}"
-    return True, "OK"
-
-
-def show_error(title, msg):
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showerror(title, msg)
-    root.destroy()
-
-
-def show_setup_guide():
-    root = tk.Tk()
-    root.withdraw()
-    msg = (
-        "首次使用需要安装 Ollama 和翻译模型：\n\n"
-        "1. 安装 Ollama:\n"
-        "   打开终端运行: brew install ollama\n"
-        "   或从 https://ollama.com 下载安装\n\n"
-        "2. 启动 Ollama:\n"
-        "   ollama serve\n\n"
-        "3. 下载翻译模型:\n"
-        "   ollama pull qwen3.5:9b\n\n"
-        "完成后重新启动本应用。"
-    )
-    messagebox.showinfo("环境配置指南", msg)
-    root.destroy()
+        root.destroy()
+        root2, _ = show_progress(f"Ollama 安装异常:\n{str(e)[:200]}")
+        root2.after(5000, root2.destroy)
+        root2.mainloop()
+        return False
 
 
 def start_ollama():
-    try:
-        subprocess.Popen(["ollama", "serve"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        import time
-        time.sleep(3)
-    except Exception:
-        pass
+    subprocess.Popen(["ollama", "serve"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(10):
+        time.sleep(1)
+        running, _ = check_ollama_running()
+        if running:
+            return True
+    return False
+
+
+def pull_model():
+    root, label = show_progress(f"正在下载翻译模型 {OLLAMA_MODEL}...\n\n约 6.6GB，首次需要几分钟")
+    root.update()
+
+    proc = subprocess.Popen(
+        ["ollama", "pull", OLLAMA_MODEL],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+    )
+
+    for line in proc.stdout:
+        line = line.strip()
+        if line:
+            label.config(text=f"正在下载翻译模型 {OLLAMA_MODEL}...\n\n{line}")
+            root.update()
+
+    proc.wait()
+    root.destroy()
+    return proc.returncode == 0
+
+
+def check_model(models):
+    for m in models:
+        name = m.get("name", "") if isinstance(m, dict) else str(m)
+        if OLLAMA_MODEL in name:
+            return True
+    return False
+
+
+def setup_and_launch():
+    if not check_ollama_binary():
+        root, label = show_progress("首次使用，正在自动安装 Ollama...\n\n可能需要几分钟，请耐心等待")
+        root.update()
+        ok = install_ollama()
+        root.destroy()
+        if not ok:
+            sys.exit(1)
+
+    running, models = check_ollama_running()
+    if not running:
+        root, label = show_progress("正在启动 Ollama 服务...")
+        root.update()
+        ok = start_ollama()
+        root.destroy()
+        if not ok:
+            root2, _ = show_progress("Ollama 启动失败，请手动运行:\n  ollama serve")
+            root2.after(5000, root2.destroy)
+            root2.mainloop()
+            sys.exit(1)
+        running, models = check_ollama_running()
+
+    if not check_model(models):
+        ok = pull_model()
+        if not ok:
+            root, _ = show_progress("模型下载失败，请手动运行:\n  ollama pull " + OLLAMA_MODEL)
+            root.after(5000, root.destroy)
+            root.mainloop()
+            sys.exit(1)
 
 
 def main():
-    ok, reason = check_ollama()
-    if not ok:
-        if "未安装" in reason:
-            show_setup_guide()
-            sys.exit(1)
-        else:
-            start_ollama()
-            ok, reason = check_ollama()
-            if not ok:
-                show_error("Ollama 错误", f"{reason}\n\n请先在终端运行:\n  ollama serve\n  ollama pull qwen3.5:9b")
-                sys.exit(1)
+    setup_and_launch()
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     if getattr(sys, 'frozen', False):
         base_dir = sys._MEIPASS
     else:
-        base_dir = script_dir
+        base_dir = os.path.dirname(os.path.abspath(__file__))
 
     sys.path.insert(0, base_dir)
     from main import main as app_main
