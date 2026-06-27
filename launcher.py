@@ -112,9 +112,15 @@ def main():
         if cfg.get("device_id") is not None and any(d["id"] == cfg["device_id"] for d in devices):
             device_id = cfg["device_id"]
         else:
+            skip = {"blackhole", "steam streaming", "soundflower", "virtual"}
             for d in devices:
-                if "麦克风" in d["name"] or "microphone" in d["name"].lower():
+                name_lower = d["name"].lower()
+                if any(s in name_lower for s in skip):
+                    continue
+                if "麦克风" in d["name"] or "microphone" in name_lower or "mic" in name_lower or "macbook" in name_lower:
                     device_id = d["id"]
+                    cfg["device_id"] = d["id"]
+                    cfg["device_name"] = d["name"]
                     break
             if device_id is None and devices:
                 device_id = devices[0]["id"]

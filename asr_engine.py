@@ -103,7 +103,9 @@ class ASREngine:
             self._create_recognition()
             try:
                 self._recognition.start()
+                print("[ASR] WebSocket 已连接", flush=True)
             except Exception as e:
+                print(f"[ASR] 连接失败: {e}", flush=True)
                 self.result_queue.put({"type": "error", "text": f"连接失败: {e}"})
                 time.sleep(3)
                 continue
@@ -111,6 +113,7 @@ class ASREngine:
             buffer = np.array([], dtype=np.float32)
             last_voice_time = time.time()
             min_buffer_samples = self.sample_rate * 0.5
+            chunks_sent = 0
 
             while self._running:
                 try:
@@ -121,8 +124,10 @@ class ASREngine:
                             pcm = (buffer * 32767).astype(np.int16).tobytes()
                             try:
                                 self._recognition.send_audio_frame(pcm)
+                                chunks_sent += 1
                             except Exception:
                                 pass
+                            print(f"[ASR] 发送最后 {len(buffer)} 样本, 共发 {chunks_sent} 块", flush=True)
                             try:
                                 self._recognition.stop()
                             except Exception:
@@ -149,10 +154,16 @@ class ASREngine:
                     pcm = (chunk * 32767).astype(np.int16).tobytes()
                     try:
                         self._recognition.send_audio_frame(pcm)
-                    except Exception:
+                        chunks_sent += 1
+                    except Exception as e:
+                        print(f"[ASR] 发送失败: {e}", flush=True)
                         break
+
+                if chunks_sent > 0 and chunks_sent % 50 == 0:
+                    print(f"[ASR] 已发送 {chunks_sent} 块音频", flush=True)
 
             try:
                 self._recognition.getDuplexApi().close(1000, "bye")
             except Exception:
                 pass
+            print(f"[ASR] 会话结束, 共发 {chunks_sent} 块", flush=True)

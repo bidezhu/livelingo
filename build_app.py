@@ -45,42 +45,42 @@ def build():
     with open(os.path.join(contents, "Info.plist"), "wb") as f:
         plistlib.dump(plist, f)
 
+    # Resolve real Python path and Tcl/Tk
+    venv_python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+    real_python = os.path.realpath(venv_python)
+    python_base = os.path.dirname(os.path.dirname(real_python))
+
+    import glob
+    tcl_dirs = glob.glob(os.path.join(python_base, "lib", "tcl*"))
+    tk_dirs = glob.glob(os.path.join(python_base, "lib", "tk*"))
+    tcl_dir = tcl_dirs[0] if tcl_dirs else ""
+    tk_dir = tk_dirs[0] if tk_dirs else ""
+
     # Write main executable shell script
     exec_script = f'''#!/bin/bash
 # LiveLingo - Real-time Bilingual Subtitle Tool
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$APP_DIR/../../.." && pwd)"
 
-# Find venv python
 VENV_PYTHON="$PROJECT_DIR/.venv/bin/python"
 if [ ! -f "$VENV_PYTHON" ]; then
     osascript -e 'display dialog "Python virtual environment not found.\\nPlease run setup.sh first." buttons {{"OK"}} default button "OK" with icon stop with title "LiveLingo"'
     exit 1
 fi
 
-# Setup Tcl/Tk for Python
-PYTHON_DIR=$(dirname $(dirname "$VENV_PYTHON"))
-TCL_DIR=$(ls -d "$PYTHON_DIR"/lib/tcl* 2>/dev/null | head -1)
-TK_DIR=$(ls -d "$PYTHON_DIR"/lib/tk* 2>/dev/null | head -1)
-[ -n "$TCL_DIR" ] && export TCL_LIBRARY="$TCL_DIR"
-[ -n "$TK_DIR" ] && export TK_LIBRARY="$TK_DIR"
-
-# Setup PATH
+export TCL_LIBRARY="{tcl_dir}"
+export TK_LIBRARY="{tk_dir}"
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:$PATH"
 
-# Log file
 LOG="/tmp/livelingo.log"
-
-# Run launcher
 cd "$PROJECT_DIR"
 "$VENV_PYTHON" launcher.py > "$LOG" 2>&1 &
 PID=$!
 
-# Wait briefly, check if it crashed
-sleep 2
+sleep 3
 if ! kill -0 $PID 2>/dev/null; then
-    ERROR=$(tail -5 "$LOG" 2>/dev/null)
-    osascript -e "display dialog \\"LiveLingo failed to start:\\n$ERROR\\" buttons {{\\"OK\\"}} default button \\"OK\\" with icon stop with title \\"LiveLingo\\"" 2>/dev/null
+    ERROR=$(tail -3 "$LOG" 2>/dev/null | head -c 200)
+    osascript -e "display dialog \\"LiveLingo failed to start:\\n{chr(10)}$ERROR\\" buttons {{\\"OK\\"}} default button \\"OK\\" with icon stop with title \\"LiveLingo\\"" 2>/dev/null
 fi
 '''
 
