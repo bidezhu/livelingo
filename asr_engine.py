@@ -5,9 +5,9 @@ import io
 import wave
 import base64
 import re
+import os
 
 
-FILLER_WORDS_ZH = set("嗯嗯啊啊额呃哦嗯嗯哼哈呢吧呀啦嘛么的了".split())
 FILLER_PATTERNS = [
     r'^(嗯+|啊+|额+|呃+|哦+|嗯哼+|哈+)+[，,。.！!？?]*$',
     r'^(uh+|um+|er+|ah+|oh+|hmm+|mm+)+[,.!?]*$',
@@ -17,22 +17,9 @@ FILLER_PATTERNS = [
 ]
 
 
-def numpy_to_wav_base64(audio_np, sample_rate=16000):
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        pcm = (audio_np * 32767).astype(np.int16)
-        wf.writeframes(pcm.tobytes())
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
 def is_filler(text):
     text = text.strip()
-    if not text:
-        return True
-    if len(text) <= 2 and all(c in FILLER_WORDS_ZH for c in text):
+    if not text or len(text) <= 1:
         return True
     for pattern in FILLER_PATTERNS:
         if re.match(pattern, text, re.IGNORECASE):
@@ -41,11 +28,9 @@ def is_filler(text):
 
 
 class ASREngine:
-    def __init__(self, api_key=None, base_url="https://api.xiaomimimo.com/v1",
-                 model="mimo-v2.5-asr", sample_rate=16000,
-                 punc_model=None, **kwargs):
+    def __init__(self, api_key=None, base_url=None, model="fun-asr-realtime",
+                 sample_rate=16000, **kwargs):
         self.api_key = api_key
-        self.base_url = base_url
         self.model = model
         self.sample_rate = sample_rate
         self.result_queue = queue.Queue()
@@ -53,60 +38,46 @@ class ASREngine:
         self._running = False
         self._audio_queue = None
         self.silence_timeout = 1.5
-        self._client = None
-        self._punc_model_name = punc_model
-        self._punc_model = None
         self.voice_threshold = 0.02
+        self._recognition = None
+        self._callback = None
 
     def load_model(self):
-        from openai import OpenAI
-        self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-        if self._punc_model_name:
-            try:
-                from funasr import AutoModel
-                self._punc_model = AutoModel(model=self._punc_model_name, device="cpu")
-            except Exception:
-                self._punc_model = None
+        import dashscope
+        dashscope.api_key = self.api_key
+        dashscope.base_websocket_api_url = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference'
 
-    def add_punctuation(self, text):
-        if not text or not self._punc_model:
-            return text
-        try:
-            res = self._punc_model.generate(input=text)
-            if res and len(res) > 0 and "text" in res[0]:
-                return res[0]["text"]
-        except Exception:
-            pass
-        return text
+    def _create_recognition(self):
+        from dashscope.audio.asr import Recognition, RecognitionCallback, RecognitionResult
 
-    def recognize(self, audio_np):
-        audio_b64 = numpy_to_wav_base64(audio_np, self.sample_rate)
-        completion = self._client.chat.completions.create(
+        engine = self
+
+        class ASRCallback(RecognitionCallback):
+            def on_event(self, result):
+                sentence = result.get_sentence()
+                if sentence and 'text' in sentence:
+                    text = sentence['text']
+                    if RecognitionResult.is_sentence_end(sentence):
+                        if text and not is_filler(text):
+                            engine.result_queue.put({"type": "final", "text": text})
+                    else:
+                        if text and not is_filler(text):
+                            engine.result_queue.put({"type": "partial", "text": text})
+
+            def on_complete(self):
+                pass
+
+            def on_error(self, result):
+                engine.result_queue.put({"type": "error", "text": str(result.message)})
+
+        self._callback = ASRCallback()
+        self._recognition = Recognition(
             model=self.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_audio",
-                            "input_audio": {
-                                "data": f"data:audio/wav;base64,{audio_b64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            extra_body={
-                "asr_options": {
-                    "language": "auto"
-                }
-            },
-            stream=False,
+            format='pcm',
+            sample_rate=self.sample_rate,
+            semantic_punctuation_enabled=False,
+            callback=self._callback,
         )
-        text = completion.choices[0].message.content
-        if text:
-            text = re.sub(r'<\|[^|]*\|>', '', text).strip()
-        return text or ""
 
     def start(self, audio_queue):
         self._audio_queue = audio_queue
@@ -116,46 +87,72 @@ class ASREngine:
 
     def stop(self):
         self._running = False
+        if self._recognition:
+            try:
+                self._recognition.stop()
+            except Exception:
+                pass
 
     def reset_cache(self):
         pass
 
     def _process_loop(self):
         import time
-        buffer = np.array([], dtype=np.float32)
-        last_voice_time = time.time()
-        min_buffer_samples = self.sample_rate * 1
-        max_buffer_samples = self.sample_rate * 15
 
         while self._running:
+            self._create_recognition()
             try:
-                audio = self._audio_queue.get(timeout=0.3)
-            except queue.Empty:
-                if len(buffer) >= min_buffer_samples and (time.time() - last_voice_time > self.silence_timeout):
-                    self._flush_buffer(buffer)
-                    buffer = np.array([], dtype=np.float32)
+                self._recognition.start()
+            except Exception as e:
+                self.result_queue.put({"type": "error", "text": f"连接失败: {e}"})
+                time.sleep(3)
                 continue
 
-            if audio is None:
-                continue
+            buffer = np.array([], dtype=np.float32)
+            last_voice_time = time.time()
+            min_buffer_samples = self.sample_rate * 0.5
 
-            audio_np = audio if isinstance(audio, np.ndarray) else np.array(audio, dtype=np.float32)
-            buffer = np.concatenate([buffer, audio_np])
+            while self._running:
+                try:
+                    audio = self._audio_queue.get(timeout=0.3)
+                except queue.Empty:
+                    if len(buffer) >= min_buffer_samples and (time.time() - last_voice_time > self.silence_timeout):
+                        if len(buffer) > 0:
+                            pcm = (buffer * 32767).astype(np.int16).tobytes()
+                            try:
+                                self._recognition.send_audio_frame(pcm)
+                            except Exception:
+                                pass
+                            try:
+                                self._recognition.stop()
+                            except Exception:
+                                pass
+                            buffer = np.array([], dtype=np.float32)
+                            time.sleep(0.5)
+                            break
+                    continue
 
-            rms = np.sqrt(np.mean(audio_np ** 2))
-            if rms > self.voice_threshold:
-                last_voice_time = time.time()
+                if audio is None:
+                    continue
 
-            if len(buffer) >= max_buffer_samples or (len(buffer) >= min_buffer_samples and time.time() - last_voice_time > self.silence_timeout):
-                self._flush_buffer(buffer)
-                buffer = np.array([], dtype=np.float32)
+                audio_np = audio if isinstance(audio, np.ndarray) else np.array(audio, dtype=np.float32)
+                buffer = np.concatenate([buffer, audio_np])
 
-    def _flush_buffer(self, buffer):
-        if len(buffer) < self.sample_rate * 0.8:
-            return
-        try:
-            text = self.recognize(buffer)
-            if text and not is_filler(text):
-                self.result_queue.put({"type": "final", "text": text})
-        except Exception as e:
-            self.result_queue.put({"type": "error", "text": str(e)})
+                rms = np.sqrt(np.mean(audio_np ** 2))
+                if rms > self.voice_threshold:
+                    last_voice_time = time.time()
+
+                chunk_samples = int(self.sample_rate * 0.1)
+                while len(buffer) >= chunk_samples:
+                    chunk = buffer[:chunk_samples]
+                    buffer = buffer[chunk_samples:]
+                    pcm = (chunk * 32767).astype(np.int16).tobytes()
+                    try:
+                        self._recognition.send_audio_frame(pcm)
+                    except Exception:
+                        break
+
+            try:
+                self._recognition.getDuplexApi().close(1000, "bye")
+            except Exception:
+                pass

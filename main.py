@@ -27,10 +27,8 @@ def start_subtitle_app(cfg, audio, asr, translator, device_id):
             audio.device_id = new_id
             ui.update_status(f"已切换: {new_name}")
         audio.start()
-        asr.reset_cache()
 
     def on_asr_final(text):
-        print(f"[ASR最终] {text[:50]}", flush=True)
         translator.submit(text)
 
     def on_settings():
@@ -66,28 +64,26 @@ def main():
     cfg = load_config()
 
     print("=" * 50)
-    print("  LiveLingo - 本地离线中英双语实时字幕")
+    print("  LiveLingo - 中英双语实时字幕")
     print("=" * 50)
 
-    api_key = cfg.get("mimo_api_key", "")
-    base_url = cfg.get("mimo_base_url", "https://api.xiaomimimo.com/v1")
+    api_key = cfg.get("api_key", "")
 
-    print("[..] 初始化 MiMo ASR...")
+    print("[..] 初始化 ASR...")
     asr = ASREngine(
         api_key=api_key,
-        base_url=base_url,
-        model=cfg.get("mimo_asr_model", "mimo-v2.5-asr"),
+        model=cfg.get("asr_model", "fun-asr-realtime"),
         sample_rate=cfg.get("sample_rate", 16000),
     )
     asr.silence_timeout = cfg.get("silence_timeout", 1.5)
     asr.load_model()
     print("[OK] ASR 就绪")
 
-    print("[..] 初始化 MiMo 翻译...")
+    print("[..] 初始化翻译...")
     translator = Translator(
         api_key=api_key,
-        base_url=base_url,
-        model=cfg.get("mimo_chat_model", "mimo-v2.5"),
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model=cfg.get("translate_model", "qwen-plus"),
     )
     translator.load()
     print("[OK] 翻译就绪")

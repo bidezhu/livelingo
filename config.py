@@ -6,10 +6,9 @@ CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
-    "mimo_api_key": "",
-    "mimo_base_url": "https://api.xiaomimimo.com/v1",
-    "mimo_asr_model": "mimo-v2.5-asr",
-    "mimo_chat_model": "mimo-v2.5",
+    "api_key": "sk-af5637681c764470ba5e70e2f8de19f3",
+    "asr_model": "fun-asr-realtime",
+    "translate_model": "qwen-plus",
     "sample_rate": 16000,
     "font_size_cn": 28,
     "font_size_en": 20,

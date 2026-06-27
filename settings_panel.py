@@ -35,13 +35,13 @@ class SettingsPanel:
         tk.Label(frame, text="API 设置", font=("Helvetica", 16, "bold")).pack(anchor="w")
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(5, 10))
 
-        tk.Label(frame, text="MiMo API Key", font=("Helvetica", 12), anchor="w").pack(anchor="w")
-        api_key_var = tk.StringVar(value=self.cfg.get("mimo_api_key", ""))
+        tk.Label(frame, text="API Key", font=("Helvetica", 12), anchor="w").pack(anchor="w")
+        api_key_var = tk.StringVar(value=self.cfg.get("api_key", ""))
         api_entry = tk.Entry(frame, textvariable=api_key_var, font=("Helvetica", 11),
                              show="*", width=50)
         api_entry.pack(fill="x", pady=(2, 5))
 
-        tk.Label(frame, text="获取地址: platform.xiaomimimo.com/console/api-keys",
+        tk.Label(frame, text="百炼控制台: bailian.console.aliyun.com",
                  font=("Helvetica", 10), fg="#666666").pack(anchor="w")
 
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(15, 10))
@@ -93,7 +93,7 @@ class SettingsPanel:
         btn_frame.pack(fill="x", pady=(20, 0))
 
         def on_apply():
-            self.cfg["mimo_api_key"] = api_key_var.get().strip()
+            self.cfg["api_key"] = api_key_var.get().strip()
             self.cfg["font_size_cn"] = cn_size_var.get()
             self.cfg["font_size_en"] = en_size_var.get()
             self.cfg["max_subtitle_lines"] = lines_var.get()

@@ -48,7 +48,7 @@ def main():
     label.pack(fill="both", expand=True)
     root.update()
 
-    app_state = {"done": False, "error": None, "cfg": None}
+    app_state = {"done": False, "error": None, "data": None}
 
     def bg_setup():
         try:
@@ -57,35 +57,31 @@ def main():
             from translator import Translator
 
             cfg = load_config()
-            api_key = cfg.get("mimo_api_key", "")
-            base_url = cfg.get("mimo_base_url", "https://api.xiaomimimo.com/v1")
+            api_key = cfg.get("api_key", "")
 
             if not api_key:
-                app_state["error"] = "未配置 MiMo API Key\n请在设置中填入 API Key\n获取地址: platform.xiaomimimo.com"
+                app_state["error"] = "未配置 API Key\n请在设置中填入"
                 return
 
-            root.after(0, lambda: label.config(text="加载语音识别..."))
+            root.after(0, lambda: label.config(text="连接 ASR 服务..."))
 
             asr = ASREngine(
                 api_key=api_key,
-                base_url=base_url,
-                model=cfg.get("mimo_asr_model", "mimo-v2.5-asr"),
+                model=cfg.get("asr_model", "fun-asr-realtime"),
                 sample_rate=cfg.get("sample_rate", 16000),
             )
             asr.silence_timeout = cfg.get("silence_timeout", 1.5)
             asr.load_model()
 
-            root.after(0, lambda: label.config(text="加载翻译模型..."))
+            root.after(0, lambda: label.config(text="连接翻译服务..."))
             translator = Translator(
                 api_key=api_key,
-                base_url=base_url,
-                model=cfg.get("mimo_chat_model", "mimo-v2.5"),
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                model=cfg.get("translate_model", "qwen-plus"),
             )
             translator.load()
 
-            app_state["cfg"] = cfg
-            app_state["asr"] = asr
-            app_state["translator"] = translator
+            app_state["data"] = {"cfg": cfg, "asr": asr, "translator": translator}
             app_state["done"] = True
         except Exception as e:
             app_state["error"] = str(e)
@@ -104,9 +100,10 @@ def main():
         label.config(text="启动中...")
         root.update()
 
-        cfg = app_state["cfg"]
-        asr = app_state["asr"]
-        translator = app_state["translator"]
+        data = app_state["data"]
+        cfg = data["cfg"]
+        asr = data["asr"]
+        translator = data["translator"]
 
         from audio_capture import AudioCapture
 

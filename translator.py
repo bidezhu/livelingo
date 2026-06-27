@@ -4,8 +4,8 @@ import re
 
 
 class Translator:
-    def __init__(self, api_key=None, base_url="https://api.xiaomimimo.com/v1",
-                 model="mimo-v2.5", **kwargs):
+    def __init__(self, api_key=None, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                 model="qwen-plus", **kwargs):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
@@ -18,19 +18,6 @@ class Translator:
     def load(self):
         from openai import OpenAI
         self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-
-    def check_available(self):
-        if not self._client:
-            self.load()
-        try:
-            self._client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": "hi"}],
-                max_tokens=5,
-            )
-            return True
-        except Exception:
-            return False
 
     def translate(self, text, target_lang=None):
         if target_lang is None:
@@ -90,7 +77,5 @@ class Translator:
                 continue
             if text is None:
                 continue
-            print(f"[翻译] 收到: {text[:40]}...", flush=True)
             result = self.translate(text)
-            print(f"[翻译] 结果: {result[:40]}...", flush=True)
             self.result_queue.put({"original": text, "translated": result})
