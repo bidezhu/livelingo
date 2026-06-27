@@ -6,15 +6,11 @@ CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
+    "mimo_api_key": "",
+    "mimo_base_url": "https://api.xiaomimimo.com/v1",
+    "mimo_asr_model": "mimo-v2.5-asr",
+    "mimo_chat_model": "mimo-v2.5",
     "sample_rate": 16000,
-    "chunk_size": [0, 10, 5],
-    "encoder_chunk_look_back": 4,
-    "decoder_chunk_look_back": 1,
-    "asr_model": "iic/SenseVoiceSmall",
-    "vad_model": "fsmn-vad",
-    "punc_model": "ct-punc",
-    "ollama_model": "qwen3.5:9b",
-    "ollama_url": "http://localhost:11434",
     "font_size_cn": 28,
     "font_size_en": 20,
     "max_subtitle_lines": 4,
@@ -25,6 +21,7 @@ DEFAULTS = {
     "text_color_partial": "#888888",
     "device_id": None,
     "device_name": None,
+    "silence_timeout": 1.5,
 }
 
 

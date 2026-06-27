@@ -1,8 +1,5 @@
-torch
-torchaudio
-funasr
+openai
 sounddevice
 numpy
 scipy
 requests
-pyinstaller

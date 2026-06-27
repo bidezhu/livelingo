@@ -69,20 +69,28 @@ def main():
     print("  LiveLingo - 本地离线中英双语实时字幕")
     print("=" * 50)
 
-    base_url = cfg["ollama_url"].rstrip("/")
-    for suffix in ["/v1/chat/completions", "/api/chat"]:
-        base_url = base_url.replace(suffix, "")
-    translator = Translator(model=cfg["ollama_model"], base_url=base_url)
+    api_key = cfg.get("mimo_api_key", "")
+    base_url = cfg.get("mimo_base_url", "https://api.xiaomimimo.com/v1")
 
-    print("[..] 加载 ASR 模型...")
+    print("[..] 初始化 MiMo ASR...")
     asr = ASREngine(
-        model_name=cfg["asr_model"],
-        vad_model=cfg.get("vad_model", "fsmn-vad"),
-        punc_model=cfg.get("punc_model", "ct-punc"),
+        api_key=api_key,
+        base_url=base_url,
+        model=cfg.get("mimo_asr_model", "mimo-v2.5-asr"),
+        sample_rate=cfg.get("sample_rate", 16000),
     )
     asr.silence_timeout = cfg.get("silence_timeout", 1.5)
     asr.load_model()
-    print("[OK] ASR 模型加载完成")
+    print("[OK] ASR 就绪")
+
+    print("[..] 初始化 MiMo 翻译...")
+    translator = Translator(
+        api_key=api_key,
+        base_url=base_url,
+        model=cfg.get("mimo_chat_model", "mimo-v2.5"),
+    )
+    translator.load()
+    print("[OK] 翻译就绪")
 
     devices = AudioCapture.list_input_devices()
     device_id = None
@@ -96,7 +104,7 @@ def main():
         if device_id is None and devices:
             device_id = devices[0]["id"]
 
-    audio = AudioCapture(sample_rate=cfg["sample_rate"], device_id=device_id)
+    audio = AudioCapture(sample_rate=cfg.get("sample_rate", 16000), device_id=device_id)
     start_subtitle_app(cfg, audio, asr, translator, device_id)
 
 
