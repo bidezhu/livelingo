@@ -22,10 +22,8 @@ def check_ollama(cfg):
         base_url = base_url.replace("/api/chat", "")
     t = Translator(model=cfg["ollama_model"], base_url=base_url)
     if not t.check_available():
-        print("错误: Ollama 服务未运行或模型未拉取。")
-        print("请先运行: ollama serve &")
-        print(f"然后运行: ollama pull {cfg['ollama_model']}")
-        sys.exit(1)
+        print("[!] Ollama 不可用，翻译功能将不可用")
+        return t
     print(f"[OK] Ollama 模型 {cfg['ollama_model']} 就绪")
     return t
 
