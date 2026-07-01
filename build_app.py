@@ -13,7 +13,8 @@ ICON_PATH = os.path.join(PROJECT_DIR, "LiveLingo.icns")
 PY_FILES = [
     "launcher.py", "main.py", "asr_engine.py", "translator.py",
     "audio_capture.py", "subtitle_ui.py", "device_selector.py",
-    "settings_panel.py", "config.py",
+    "settings_panel.py", "config.py", "live_translate_engine.py",
+    "system_audio_capture.py",
 ]
 
 
@@ -41,16 +42,27 @@ def build():
 
     # Write default config if not exists
     import json
+    from config import PUBLIC_HEALTH_HOT_WORDS
     default_config = {
         "api_key": "",
-        "asr_model": "fun-asr-realtime",
-        "translate_model": "qwen-plus",
+        "engine_type": "livetranslate",
+        "language_mode": "auto",
+        "hot_words": dict(PUBLIC_HEALTH_HOT_WORDS),
         "sample_rate": 16000,
-        "font_size_cn": 28,
-        "font_size_en": 20,
+        "segment_sentences": 4,
+        "min_segment_seconds": 4.0,
+        "max_segment_seconds": 28.0,
+        "display_segments": 2,
+        "subtitle_max_chars": 520,
+        "clean_fillers": True,
+        "subtitle_vertical_align": 0.5,
+        "fullscreen_font_scale": 1.25,
+        "show_language_labels": False,
+        "font_size_cn": 30,
+        "font_size_en": 24,
         "max_subtitle_lines": 4,
         "window_height": 220,
-        "silence_timeout": 1.5,
+        "silence_timeout": 1.7,
         "bg_color": "#1a1a1a",
         "text_color_cn": "#FFFFFF",
         "text_color_en": "#BBBBBB",
@@ -66,8 +78,8 @@ def build():
         "CFBundleName": APP_NAME,
         "CFBundleDisplayName": APP_NAME,
         "CFBundleIdentifier": f"com.bidezhu.{APP_NAME.lower()}",
-        "CFBundleVersion": "1.0.0",
-        "CFBundleShortVersionString": "1.0.0",
+        "CFBundleVersion": "1.2.0",
+        "CFBundleShortVersionString": "1.2.0",
         "CFBundleExecutable": APP_NAME,
         "CFBundleIconFile": APP_NAME,
         "CFBundlePackageType": "APPL",
@@ -132,17 +144,22 @@ if [ ! -f "$USER_DIR/.venv/bin/python" ]; then
     $PYTHON -m venv "$USER_DIR/.venv"
     source "$USER_DIR/.venv/bin/activate"
     pip install --upgrade pip -q
-    pip install openai sounddevice numpy requests dashscope -q 2>&1 | tail -1
+    pip install openai sounddevice numpy requests dashscope websocket-client soundcard -q 2>&1 | tail -1
 fi
 
-# Resolve Tcl/Tk
+# Resolve Tcl/Tk - 使用 Python 自身来获取正确路径
 VENV_PY="$USER_DIR/.venv/bin/python"
-REAL_PY=$(readlink -f "$VENV_PY" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$VENV_PY'))")
-PY_BASE=$(dirname $(dirname "$REAL_PY"))
-TCL_DIR=$(ls -d "$PY_BASE"/lib/tcl* 2>/dev/null | head -1)
-TK_DIR=$(ls -d "$PY_BASE"/lib/tk* 2>/dev/null | head -1)
-[ -n "$TCL_DIR" ] && export TCL_LIBRARY="$TCL_DIR"
-[ -n "$TK_DIR" ] && export TK_LIBRARY="$TK_DIR"
+TCL_DIR=$("$VENV_PY" -c "import tkinter; print(tkinter.Tcl().eval('info library'))" 2>/dev/null)
+if [ -n "$TCL_DIR" ]; then
+    export TCL_LIBRARY="$TCL_DIR"
+    export TK_LIBRARY="$TCL_DIR"
+else
+    # Fallback: 从 Python 安装路径查找
+    REAL_PY=$(readlink -f "$VENV_PY" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$VENV_PY'))")
+    PY_BASE=$(dirname $(dirname "$REAL_PY"))
+    TCL_DIR=$(ls -d "$PY_BASE"/lib/tcl* 2>/dev/null | head -1)
+    [ -n "$TCL_DIR" ] && export TCL_LIBRARY="$TCL_DIR" && export TK_LIBRARY="$TCL_DIR"
+fi
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:$PATH"
 
 # Run

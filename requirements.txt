@@ -3,3 +3,5 @@ sounddevice
 numpy
 scipy
 requests
+websocket-client
+soundcard

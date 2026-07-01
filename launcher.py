@@ -53,8 +53,7 @@ def main():
     def bg_setup():
         try:
             from config import load_config
-            from asr_engine import ASREngine
-            from translator import Translator
+            from live_translate_engine import DualLiveTranslateEngine
 
             cfg = load_config()
             api_key = cfg.get("api_key", "")
@@ -63,25 +62,21 @@ def main():
                 app_state["error"] = "no_api_key"
                 return
 
-            root.after(0, lambda: label.config(text="连接 ASR 服务..."))
-
-            asr = ASREngine(
+            root.after(0, lambda: label.config(text="连接实时同传服务..."))
+            asr = DualLiveTranslateEngine(
                 api_key=api_key,
-                model=cfg.get("asr_model", "fun-asr-realtime"),
+                hot_words=cfg.get("hot_words", {}),
                 sample_rate=cfg.get("sample_rate", 16000),
+                model=cfg.get("livetranslate_model", "qwen3.5-livetranslate-flash-realtime"),
+                segment_sentences=cfg.get("segment_sentences", 3),
+                max_segment_seconds=cfg.get("max_segment_seconds", 20.0),
+                min_segment_seconds=cfg.get("min_segment_seconds", 3.0),
+                silence_timeout=cfg.get("silence_timeout", 1.2),
+                voice_threshold=cfg.get("voice_threshold", 0.003),
+                language_mode=cfg.get("language_mode", "auto"),
             )
-            asr.silence_timeout = cfg.get("silence_timeout", 1.5)
-            asr.load_model()
 
-            root.after(0, lambda: label.config(text="连接翻译服务..."))
-            translator = Translator(
-                api_key=api_key,
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                model=cfg.get("translate_model", "qwen-plus"),
-            )
-            translator.load()
-
-            app_state["data"] = {"cfg": cfg, "asr": asr, "translator": translator}
+            app_state["data"] = {"cfg": cfg, "asr": asr}
             app_state["done"] = True
         except Exception as e:
             app_state["error"] = str(e)
@@ -124,34 +119,43 @@ def main():
         data = app_state["data"]
         cfg = data["cfg"]
         asr = data["asr"]
-        translator = data["translator"]
+        capture_mode = cfg.get("capture_mode", "microphone")
 
-        from audio_capture import AudioCapture
+        from system_audio_capture import CombinedAudioCapture
 
-        devices = AudioCapture.list_input_devices()
+        # 获取所有可用设备
+        all_devices = CombinedAudioCapture.list_all_devices()
         device_id = None
-        if cfg.get("device_id") is not None and any(d["id"] == cfg["device_id"] for d in devices):
-            device_id = cfg["device_id"]
-        else:
+
+        if cfg.get("device_id") is not None:
+            # 检查保存的设备是否仍然可用
+            for d in all_devices:
+                if d["id"] == cfg["device_id"]:
+                    device_id = cfg["device_id"]
+                    break
+
+        if device_id is None:
+            # 自动选择默认设备
             skip = {"blackhole", "steam streaming", "soundflower", "virtual"}
-            for d in devices:
+            for d in all_devices:
                 name_lower = d["name"].lower()
                 if any(s in name_lower for s in skip):
                     continue
-                if "麦克风" in d["name"] or "microphone" in name_lower or "mic" in name_lower or "macbook" in name_lower:
-                    device_id = d["id"]
-                    cfg["device_id"] = d["id"]
-                    cfg["device_name"] = d["name"]
-                    break
-            if device_id is None and devices:
-                device_id = devices[0]["id"]
+                if d.get("type") == "microphone":
+                    if "麦克风" in d["name"] or "microphone" in name_lower or "macbook" in name_lower:
+                        device_id = d["id"]
+                        cfg["device_id"] = d["id"]
+                        cfg["device_name"] = d["name"]
+                        break
+            if device_id is None and all_devices:
+                device_id = all_devices[0]["id"]
 
-        audio = AudioCapture(sample_rate=cfg.get("sample_rate", 16000), device_id=device_id)
+        audio = CombinedAudioCapture(sample_rate=cfg.get("sample_rate", 16000))
 
         root.destroy()
 
         from main import start_subtitle_app
-        start_subtitle_app(cfg, audio, asr, translator, device_id)
+        start_subtitle_app(cfg, audio, asr, device_id, capture_mode)
 
     root.after(500, poll_ready)
     root.mainloop()
