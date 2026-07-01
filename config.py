@@ -80,7 +80,7 @@ PUBLIC_HEALTH_HOT_WORDS = {
 }
 
 DEFAULTS = {
-    "api_key": "sk-af5637681c764470ba5e70e2f8de19f3",
+    "api_key": "",
     "engine_type": "livetranslate",  # "legacy" or "livetranslate"
     "asr_model": "fun-asr-realtime",
     "translate_model": "qwen-plus",
